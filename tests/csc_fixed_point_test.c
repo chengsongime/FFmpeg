@@ -52,7 +52,7 @@ typedef struct {
 } Rat;
 
 /* ================================================================
- * Fixed-point 3x3 matrix operations (Q20 format, int64_t)
+ * Fixed-point 3x3 matrix operations (Q28 format, int64_t)
  * ================================================================ */
 typedef struct {
     int64_t m[3][3];
@@ -285,7 +285,7 @@ static FPMat3 fp_xyz2rgb(const ColorPrimDesc *desc)
 }
 
 /* ================================================================
- * Bradford chromatic adaptation in Q20 fixed-point
+ * Bradford chromatic adaptation in Q28 fixed-point
  * ================================================================ */
 
 /* Bradford matrix in Q28 (pre-computed integer constants, no float)
@@ -618,7 +618,7 @@ static int test_conversion(const char *src_name, const ColorPrimDesc *src,
     ref_quantize_coeffs(&ref_mat, ref_coeffs);
 
     /* Report matrix values */
-    printf("  Fixed-point Q20 matrix:\n");
+    printf("  Fixed-point Q28 matrix:\n");
     for (i = 0; i < 3; i++) {
         printf("    [");
         for (j = 0; j < 3; j++)
