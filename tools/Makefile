@@ -26,6 +26,9 @@ tools/target_sws_fuzzer.o: tools/target_sws_fuzzer.c
 tools/target_swr_fuzzer.o: tools/target_swr_fuzzer.c
 	$(COMPILE_C)
 
+tools/csc_fixed_point$(EXESUF): tools/csc_fixed_point.o $(FF_STATIC_DEP_LIBS)
+	$(call LINK,$(LDFLAGS) $(LDEXEFLAGS) $(LD_O) $^ $(ELIBS) $(FF_EXTRALIBS) -lm)
+
 tools/enc_recon_frame_test$(EXESUF): tools/decode_simple.o
 tools/venc_data_dump$(EXESUF): tools/decode_simple.o
 tools/scale_slice_test$(EXESUF): tools/decode_simple.o
