@@ -248,7 +248,16 @@ static void fp_fill_whitepoint_conv(FPMatrix3x3 *out,
  * Uses float for pow() only - this is the minimal floating-point
  * usage needed for transcendental functions. Everything else is
  * integer/fixed-point.
+ *
+ * Internal RGB representation:
+ *   - 15-bit signed (int16_t), range [0,1] maps to [0, RGB_SCALE]
+ *   - LUT has RGB_LUT_SIZE entries covering [-RGB_OFFSET, RGB_LUT_SIZE-RGB_OFFSET-1]
+ *   - The offset RGB_OFFSET maps input 0.0 to LUT index RGB_OFFSET
  * ================================================================ */
+
+#define RGB_SCALE     28672   /* internal RGB [0,1] range upper bound */
+#define RGB_OFFSET    2048    /* LUT offset for value 0.0 */
+#define RGB_LUT_SIZE  32768   /* total LUT entries */
 
 struct TransferChar {
     float alpha, beta, gamma, delta;
@@ -274,13 +283,13 @@ static int fill_gamma_lut(int16_t **lin_lut_out, int16_t **delin_lut_out,
     int16_t *lin_lut, *delin_lut;
     int n;
 
-    lin_lut = malloc(sizeof(*lin_lut) * 32768 * 2);
+    lin_lut = malloc(sizeof(*lin_lut) * RGB_LUT_SIZE * 2);
     if (!lin_lut)
         return -1;
-    delin_lut = lin_lut + 32768;
+    delin_lut = lin_lut + RGB_LUT_SIZE;
 
-    for (n = 0; n < 32768; n++) {
-        float v = (n - 2048.0f) / 28672.0f;
+    for (n = 0; n < RGB_LUT_SIZE; n++) {
+        float v = (n - (float)RGB_OFFSET) / (float)RGB_SCALE;
         float d, l;
         int d_rounded, l_rounded;
 
@@ -291,7 +300,7 @@ static int fill_gamma_lut(int16_t **lin_lut_out, int16_t **delin_lut_out,
             d = out_trc->delta * v;
         else
             d = out_trc->alpha * powf(v, out_trc->gamma) - (out_trc->alpha - 1.0f);
-        d_rounded = lrintf(d * 28672.0f);
+        d_rounded = lrintf(d * (float)RGB_SCALE);
         delin_lut[n] = av_clip_int16(d_rounded);
 
         /* Linearize (using input TRC) */
@@ -314,7 +323,7 @@ static int fill_gamma_lut(int16_t **lin_lut_out, int16_t **delin_lut_out,
             else
                 l = powf(v, igamma);
         }
-        l_rounded = lrintf(l * 28672.0f);
+        l_rounded = lrintf(l * (float)RGB_SCALE);
         lin_lut[n] = av_clip_int16(l_rounded);
     }
 
@@ -357,7 +366,7 @@ static void yuv2rgb_pixel(int y_val, int u_val, int v_val,
 /* Apply LUT to linearize/delinearize */
 static int16_t apply_lut_val(int16_t val, const int16_t *lut)
 {
-    return lut[av_clip_uintp2(2048 + val, 15)];
+    return lut[av_clip_uintp2(RGB_OFFSET + val, 15)];
 }
 
 /* 3x3 matrix multiply on internal RGB (14-bit coefficients) */
@@ -557,10 +566,8 @@ static void fp_quantize_yuv2rgb(const FPMatrix3x3 *yuv2rgb_fp,
     for (n = 0; n < 3; n++) {
         int in_rng = y_rng;
         for (m = 0; m < 3; m++, in_rng = uv_rng) {
-            /* coeff = round(28672 * bits * yuv2rgb[n][m] / in_rng)
-             *       = round(yuv2rgb_fp * 28672 * bits / (in_rng * FP_ONE))
-             *       = (yuv2rgb_fp * 28672 * bits / in_rng + FP_HALF) >> FP_BITS */
-            int64_t val = yuv2rgb_fp->m[n][m] * (int64_t)28672 * bits / in_rng;
+            /* coeff = round(RGB_SCALE * bits * yuv2rgb[n][m] / in_rng) */
+            int64_t val = yuv2rgb_fp->m[n][m] * (int64_t)RGB_SCALE * bits / in_rng;
             out[n][m] = (int16_t)((val + FP_HALF) >> FP_BITS);
         }
     }
@@ -576,8 +583,8 @@ static void fp_quantize_rgb2yuv(const FPMatrix3x3 *rgb2yuv_fp,
     int out_rng = y_rng;
     for (n = 0; n < 3; n++, out_rng = uv_rng) {
         for (m = 0; m < 3; m++) {
-            /* coeff = round(bits * out_rng * rgb2yuv[n][m] / 28672) */
-            int64_t val = rgb2yuv_fp->m[n][m] * (int64_t)bits * out_rng / 28672;
+            /* coeff = round(bits * out_rng * rgb2yuv[n][m] / RGB_SCALE) */
+            int64_t val = rgb2yuv_fp->m[n][m] * (int64_t)bits * out_rng / RGB_SCALE;
             out[n][m] = (int16_t)((val + FP_HALF) >> FP_BITS);
         }
     }
@@ -608,7 +615,7 @@ static void ref_quantize_yuv2rgb(const double yuv2rgb[3][3],
     for (n = 0; n < 3; n++) {
         int in_rng = y_rng;
         for (m = 0; m < 3; m++, in_rng = uv_rng)
-            out[n][m] = (int16_t)lrint(28672.0 * bits * yuv2rgb[n][m] / in_rng);
+            out[n][m] = (int16_t)lrint((double)RGB_SCALE * bits * yuv2rgb[n][m] / in_rng);
     }
 }
 
@@ -621,7 +628,7 @@ static void ref_quantize_rgb2yuv(const double rgb2yuv[3][3],
     int out_rng = y_rng;
     for (n = 0; n < 3; n++, out_rng = uv_rng)
         for (m = 0; m < 3; m++)
-            out[n][m] = (int16_t)lrint((double)bits * out_rng * rgb2yuv[n][m] / 28672.0);
+            out[n][m] = (int16_t)lrint((double)bits * out_rng * rgb2yuv[n][m] / RGB_SCALE);
 }
 
 static void ref_quantize_lrgb2lrgb(const double rgb2rgb[3][3],
