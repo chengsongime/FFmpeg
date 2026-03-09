@@ -2234,9 +2234,9 @@ yuv2rgb_full_2_c_template(SwsInternal *c, const int16_t *buf[2],
         step = 1;
 
     for (i = 0; i < dstW; i++) {
-        int Y = ( buf0[i] * yalpha1  +  buf1[i] * yalpha             ) >> 10; //FIXME rounding
-        int U = (ubuf0[i] * uvalpha1 + ubuf1[i] * uvalpha-(128 << 19)) >> 10;
-        int V = (vbuf0[i] * uvalpha1 + vbuf1[i] * uvalpha-(128 << 19)) >> 10;
+        int Y = ( buf0[i] * yalpha1  +  buf1[i] * yalpha  + (1 << 9)            ) >> 10;
+        int U = (ubuf0[i] * uvalpha1 + ubuf1[i] * uvalpha + (1 << 9) - (128 << 19)) >> 10;
+        int V = (vbuf0[i] * uvalpha1 + vbuf1[i] * uvalpha + (1 << 9) - (128 << 19)) >> 10;
 
         if (hasAlpha) {
             A = (abuf0[i] * yalpha1 + abuf1[i] * yalpha + (1<<18)) >> 19;
